@@ -1,56 +1,26 @@
 import streamlit as st
 import os
 from groq import Groq
-import re
 
-# Track chat history
+# Khởi tạo lịch sử chat
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {"role": "assistant", "content": "Hello! How can I help you today?"}
     ]
 
-# Hàm xử lý và phân loại chi tiêu
-def process_expense_response(response: str, user_input: str) -> str:
-    """
-    Xử lý và phân loại chi tiêu từ đầu vào của người dùng.
-    Trả về chuỗi đã được phân loại và định dạng.
-    """
-    # Danh sách các từ khóa để phân loại
-    expense_categories = {
-        "di chuyển": ["đi", "xăng", "vé", "chuyến", "taxi", "grab"],
-        "mua sắm": ["mua", "bought", "shopee", "tiki", "lazada", "đồ", "quần", "áo", "giày", "sách", "đồng hồ"],
-        "ăn uống": ["ăn", "food", "quán", "nhà hàng", "cơm", "phở", "bún", "mì", "bánh", "trà", "cà phê", "nước", "thức uống"],
-        "hóa đơn": ["điện", "nước", "internet", "điện thoại", "bill", "hóa đơn"],
-        "giải trí": ["xem", "phim", "rạp", "concert", "karaoke", "games", "trò chơi", "net", "pubg", "mobile", "pubg mobile"],
-        "khác": []
-    }
+# System prompt được cập nhật để phân loại chi tiêu vào các danh mục cố định
+# Các danh mục: Di chuyển, Mua sắm, Ăn uống, Hóa đơn, Giải trí, Y tế, Khác
+system_prompt = """
+Bạn là một chuyên gia lập trình Expo, React Native và JavaScript. Bạn hỗ trợ người dùng sửa lỗi, tối ưu code, cập nhật phiên bản, và hướng dẫn triển khai ứng dụng Expo. Khi người dùng gửi code, bạn cần:
 
-    # Lấy số tiền từ đầu vào
-    numbers = re.findall(r'\d+', user_input)
-    if numbers:
-        money = numbers[-1] + "k"  # Giả sử đơn vị là nghìn đồng
-    else:
-        money = "Không rõ số tiền"
-
-    # Phân loại chi tiêu
-    category = "khác"
-    for key, keywords in expense_categories.items():
-        for word in keywords:
-            if word in user_input.lower():
-                category = key
-                break
-        if category != "khác":
-            break
-
-    # Tạo chuỗi đầu ra
-    formatted_response = f"**Phân loại: {category.capitalize()}, Tiền: {money}**"
-
-    return formatted_response
-
-# Hàm loại bỏ <think>...</think>
-def remove_think_tags(response: str) -> str:
-    # Loại bỏ phần <think>...</think>
-    return re.sub(r"<think>.*?</think>", "", response)
+Phân tích lỗi hoặc vấn đề trong code.
+Đề xuất giải pháp chi tiết và giải thích lý do.
+Cung cấp code đã chỉnh sửa với chú thích rõ ràng.
+Hỗ trợ nâng cấp phiên bản Expo SDK nếu cần.
+Tư vấn cách tối ưu hiệu suất, giảm dung lượng ứng dụng.
+Giúp debug trên các nền tảng Android, iOS và Web.
+Hãy trả lời một cách súc tích, dễ hiểu và cung cấp ví dụ thực tế nếu cần.
+"""
 
 # Gọi API của Groq với model llama-3.3-70b-specdec
 def deepseek_chat(messages: list) -> str:
@@ -61,16 +31,11 @@ def deepseek_chat(messages: list) -> str:
 
         client = Groq(api_key=api_key)
         response = client.chat.completions.create(
-            model="llama-3.3-70b-specdec",  # Cập nhật model mới
-            messages=[{"role": "system", "content": """You are a helpful assistant. Always categorize expenses when possible. 
-            Format: **Phân loại: [category], Tiền: [amount]**
-            Examples:
-            - Phân loại: Di chuyển, Tiền: 50k
-            - Phân loại: Mua sắm, Tiền: 100k"""}, *messages],
+            model="deepseek-r1-distill-qwen-32b",
+            messages=[{"role": "system", "content": system_prompt}, *messages],
             stream=False
         )
-        # Trả về nội dung sau khi loại bỏ các thẻ <think>
-        return remove_think_tags(response.choices[0].message.content)
+        return response.choices[0].message.content
     except Exception as e:
         st.error(f"Error occurred: {str(e)}")
         return ""
@@ -78,45 +43,37 @@ def deepseek_chat(messages: list) -> str:
 def main():
     st.title('🤖 HEHE Chatbot')
 
-    # Sidebar with user guide
+    # Sidebar với hướng dẫn sử dụng
     with st.sidebar:
         st.header("📚 User Guide")
-        st.markdown("""- Nhập chi tiêu của bạn, ví dụ: "Hôm nay tôi đi đổ xăng hết 50k"
-        - Chatbot sẽ tự động phân loại và hiển thị kết quả theo dạng: **Phân loại: [category], Tiền: [amount]**
-        - Ví dụ:
-            - Phân loại: Di chuyển, Tiền: 50k
-            - Phân loại: Mua sắm, Tiền: 100k""")
+        st.markdown(
+            """- Nhập chi tiêu của bạn, ví dụ: "Hôm nay tôi đi đổ xăng hết 50k".
+- Chatbot sẽ tự động phân loại chi tiêu vào các danh mục cố định: Di chuyển, Mua sắm, Ăn uống, Hóa đơn, Giải trí, Y tế, Giáo dục, Đầu tư & tiết kiệm, Khác.
+- Kết quả sẽ được hiển thị theo dạng: **Phân loại: [category], Tiền: [amount]**
+- Nếu câu hỏi của bạn không liên quan đến chi tiêu, chatbot sẽ trả lời bình thường."""
+        )
 
         if st.button("Reset Chat"):
             st.session_state.messages = [
                 {"role": "assistant", "content": "Hello! How can I help you today?"}
             ]
-            st.rerun()
+            st.experimental_rerun()
 
-    # Display chat history
+    # Hiển thị lịch sử chat
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.write(message["content"])
 
-    # Handle user input
+    # Xử lý đầu vào của người dùng
     if prompt := st.chat_input("What's on your mind?"):
         st.session_state.messages.append({"role": "user", "content": prompt})
-
         with st.chat_message("user"):
             st.write(prompt)
 
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                # Truyền API key vào hàm deepseek_chat
-                response = deepseek_chat(st.session_state.messages)  # Không cần truyền api_key nữa
-
-                # Xử lý và phân loại chi tiêu
-                if "phân loại:" not in response.lower():
-                    processed_response = process_expense_response(response, prompt)
-                    st.write(processed_response)
-                else:
-                    st.write(response)
-
+                response = deepseek_chat(st.session_state.messages)
+                st.write(response)
                 st.session_state.messages.append({"role": "assistant", "content": response})
 
 if __name__ == "__main__":
