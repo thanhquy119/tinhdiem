@@ -1,2 +1,6 @@
-groq
+streamlit
+pandas
+numpy
 dataframe_image
+Pillow
+matplotlib
